@@ -30,7 +30,7 @@ RARITY_WEIGHTS = {
     "Legendary": 5
 }
 
-SHINY_CHANCE = 0.05
+SHINY_CHANCE = 0.05 
 
 # ==========================
 # Database Setup
