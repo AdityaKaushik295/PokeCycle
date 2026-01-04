@@ -9,6 +9,8 @@ from torchvision import models, transforms
 from PIL import Image
 from flask import Flask, render_template, request, redirect, session
 from datetime import date, timedelta
+from transformers import pipeline  # <-- NEW
+import io  # <-- NEW
 
 # ==========================
 # Flask App Config
@@ -120,12 +122,11 @@ def get_random_pokemon_by_types(types):
     return {
         "name": p["Name"],
         "type1": p["Type1"],
-        "type2": type2,  # <- guaranteed None or string
+        "type2": type2,
         "image": f"static/images/{name}.png",
         "rarity": get_rarity(),
         "shiny": is_shiny()
     }
-
 
 # ==========================
 # Waste Classification Model
@@ -162,6 +163,21 @@ def predict_waste(image_path):
         probs = torch.softmax(waste_model(tensor), dim=1)[0]
     idx = torch.argmax(probs).item()
     return WASTE_LABELS[idx], probs[idx].item()
+
+# ==========================
+# Pokémon Appearance Classifier (NEW)
+# ==========================
+print("Loading Pokémon appearance classifier...")
+try:
+    pokemon_pipe = pipeline(
+        "image-classification",
+        model="skshmjn/Pokemon-classifier-gen9-1025",
+        device=0 if torch.cuda.is_available() else -1
+    )
+    print("✅ Pokémon classifier loaded!")
+except Exception as e:
+    print(f"⚠️ Failed to load Pokémon model: {e}")
+    pokemon_pipe = None
 
 # ==========================
 # Recycling & Streak Logic
@@ -272,7 +288,6 @@ def dashboard():
             "waste": waste
         })
 
-
     total_recycles = len(rows)
 
     cur.execute("""
@@ -312,19 +327,93 @@ def catch():
 
             if waste != "trash":
                 pokemon = get_random_pokemon_by_types(WASTE_TO_TYPES[waste])
-                db = get_db()
-                db.execute(
-                    "INSERT INTO user_pokemon (user_id, pokemon_name, waste_type) VALUES (?,?,?)",
-                    (session["user_id"], pokemon["name"], waste)
-                )
-                db.commit()
-                db.close()
-                log_recycling(session["user_id"])
+                if pokemon:
+                    db = get_db()
+                    db.execute(
+                        "INSERT INTO user_pokemon (user_id, pokemon_name, waste_type) VALUES (?,?,?)",
+                        (session["user_id"], pokemon["name"], waste)
+                    )
+                    db.commit()
+                    db.close()
+                    log_recycling(session["user_id"])
 
     return render_template(
         "catch.html",
         pokemon=pokemon,
         waste=waste,
+        confidence=confidence
+    )
+
+# ==========================
+# NEW: Catch by Appearance Route
+# ==========================
+@app.route("/catch_appearance", methods=["GET", "POST"])
+def catch_appearance():
+    if "user_id" not in session:
+        return redirect("/login")
+
+    if pokemon_pipe is None:
+        return "Pokémon classifier not available.", 500
+
+    pokemon = None
+    predicted_name = None
+    confidence = 0.0
+
+    if request.method == "POST":
+        file = request.files.get("image")
+        if file and file.filename != '':
+            fname = f"{uuid.uuid4()}_{file.filename}"
+            path = os.path.join(UPLOAD_DIR, fname)
+            file.save(path)
+
+            try:
+                img = Image.open(path).convert("RGB")
+                predictions = pokemon_pipe(img)
+                top_pred = predictions[0]
+                predicted_label = top_pred["label"]
+                confidence = top_pred["score"]
+                predicted_name = predicted_label.strip()
+                predicted_name = predicted_name.lower()
+
+                # Check if in your dataset
+                if predicted_name in pokemon_df["Name"].values:
+                    row = pokemon_df[pokemon_df["Name"] == predicted_name].iloc[0]
+                    type2 = row["Type2"] if not pd.isna(row["Type2"]) else None
+
+                    pokemon = {
+                        "name": predicted_name,
+                        "type1": row["Type1"],
+                        "type2": type2,
+                        "image": f"static/images/{predicted_name.lower()}.png",
+                        "rarity": get_rarity(),
+                        "shiny": is_shiny()
+                    }
+
+                    # Save with special waste_type
+                    db = get_db()
+                    db.execute(
+                        "INSERT INTO user_pokemon (user_id, pokemon_name, waste_type) VALUES (?,?,?)",
+                        (session["user_id"], predicted_name, "appearance")
+                    )
+                    db.commit()
+                    db.close()
+
+                    # ⚠️ Optional: Do NOT log recycling to preserve streak integrity
+                    # log_recycling(session["user_id"])
+
+                else:
+                    predicted_name = f"{predicted_name} (not catchable)"
+                    pokemon = None
+
+            except Exception as e:
+                print(f"Error in appearance catch: {e}")
+                predicted_name = "Classification failed"
+                confidence = 0.0
+
+    return render_template(
+        "catch_appearance.html",
+        pokemon=pokemon,
+        predicted_name=predicted_name,
         confidence=confidence
     )
 

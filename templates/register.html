@@ -1,17 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Register | Pokémon Trash</title>
+    <link href="0https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); /* Vibrant red-orange gradient */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .register-container {
+            background: #fff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+        }
+
+        .register-container h2 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-family: 'Manrope', sans-serif;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #e74c3c;
+            box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.2);
+        }
+
+        button[type="submit"] {
+            width: 100%;
+            padding: 14px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.15em;
+            font-weight: 600;
+            font-family: 'Manrope', sans-serif;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+
+        button[type="submit"]:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+        }
+
+        .footer-link {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #7f8c8d;
+        }
+
+        .footer-link a {
+            color: #e74c3c;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link a:hover {
+            color: #c0392b;
+            text-decoration: underline;
+        }
+
+        /* Pokéball accent */
+        .poke-accent {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background: radial-gradient(circle, #fff 40%, #e74c3c 42%, #e74c3c 60%, #fff 62%);
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+    </style>
 </head>
 <body>
-    <h2>Register</h2>
+    <div class="register-container">
+        <img src="static/pokecycle.png" alt="Pokémon Trash Logo" style="width: 120px; height: auto; margin-bottom: 20px;">
+        <h2><span class="poke-accent"></span> Join PokéCycle</h2>
 
-    <form method="POST">
-        <input type="text" name="username" placeholder="Username" required><br><br>
-        <input type="password" name="password" placeholder="Password" required><br><br>
-        <button type="submit">Create Account</button>
-    </form>
+        <form method="POST">
+            <div class="input-group">
+                <input type="text" name="username" placeholder="Choose a username" required autocomplete="username">
+            </div>
+            <div class="input-group">
+                <input type="password" name="password" placeholder="Create a password" required autocomplete="new-password">
+            </div>
+            <button type="submit">Create Account</button>
+        </form>
 
-    <p>Already have an account? <a href="/login">Login</a></p>
+        <p class="footer-link">
+            Already have an account? <a href="/login">Login</a>
+        </p>
+    </div>
 </body>
 </html>
