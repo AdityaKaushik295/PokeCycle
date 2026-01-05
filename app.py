@@ -164,20 +164,27 @@ def predict_waste(image_path):
     idx = torch.argmax(probs).item()
     return WASTE_LABELS[idx], probs[idx].item()
 
+"""
 # ==========================
 # Pokémon Appearance Classifier (NEW)
 # ==========================
-print("Loading Pokémon appearance classifier...")
+LOCAL_POKEMON_MODEL_PATH = "models/pokemon_appearance"
+
+print("Loading Pokémon appearance classifier from local files...")
 try:
     pokemon_pipe = pipeline(
         "image-classification",
-        model="skshmjn/Pokemon-classifier-gen9-1025",
+        model=LOCAL_POKEMON_MODEL_PATH,
+        tokenizer=LOCAL_POKEMON_MODEL_PATH,  # not used for vision, but safe
+        feature_extractor=LOCAL_POKEMON_MODEL_PATH,
         device=0 if torch.cuda.is_available() else -1
     )
-    print("✅ Pokémon classifier loaded!")
+    print("✅ Local Pokémon model loaded!")
 except Exception as e:
-    print(f"⚠️ Failed to load Pokémon model: {e}")
+    print(f"⚠️ Failed to load local Pokémon model: {e}")
     pokemon_pipe = None
+
+"""
 
 # ==========================
 # Recycling & Streak Logic
@@ -347,13 +354,16 @@ def catch():
 # ==========================
 # NEW: Catch by Appearance Route
 # ==========================
+from gradio_client import Client, handle_file
+import os
+import uuid
+
+HF_SPACE_ID = "AdityaK007/pokeCycle"
+
 @app.route("/catch_appearance", methods=["GET", "POST"])
 def catch_appearance():
     if "user_id" not in session:
         return redirect("/login")
-
-    if pokemon_pipe is None:
-        return "Pokémon classifier not available.", 500
 
     pokemon = None
     predicted_name = None
@@ -367,48 +377,61 @@ def catch_appearance():
             file.save(path)
 
             try:
-                img = Image.open(path).convert("RGB")
-                predictions = pokemon_pipe(img)
-                top_pred = predictions[0]
-                predicted_label = top_pred["label"]
-                confidence = top_pred["score"]
-                predicted_name = predicted_label.strip()
-                predicted_name = predicted_name.lower()
+                client = Client(HF_SPACE_ID)
+                result = client.predict(
+                    img=handle_file(path),
+                    api_name="/classify_pokemon"
+                )
 
-                # Check if in your dataset
-                if predicted_name in pokemon_df["Name"].values:
-                    row = pokemon_df[pokemon_df["Name"] == predicted_name].iloc[0]
-                    type2 = row["Type2"] if not pd.isna(row["Type2"]) else None
-
-                    pokemon = {
-                        "name": predicted_name,
-                        "type1": row["Type1"],
-                        "type2": type2,
-                        "image": f"static/images/{predicted_name.lower()}.png",
-                        "rarity": get_rarity(),
-                        "shiny": is_shiny()
-                    }
-
-                    # Save with special waste_type
-                    db = get_db()
-                    db.execute(
-                        "INSERT INTO user_pokemon (user_id, pokemon_name, waste_type) VALUES (?,?,?)",
-                        (session["user_id"], predicted_name, "appearance")
-                    )
-                    db.commit()
-                    db.close()
-
-                    # ⚠️ Optional: Do NOT log recycling to preserve streak integrity
-                    # log_recycling(session["user_id"])
-
+                # --- NEW: Handle your Space's ACTUAL output format ---
+                if isinstance(result, dict):
+                    if "confidences" in result and len(result["confidences"]) > 0:
+                        top_pred = result["confidences"][0]
+                        predicted_name = str(top_pred["label"]).strip().lower()
+                        confidence = float(top_pred["confidence"])
+                    elif "label" in result:
+                        # Fallback to top-level 'label' if 'confidences' missing
+                        predicted_name = str(result["label"]).strip()
+                        confidence = 1.0
+                    else:
+                        predicted_name = "No label found"
+                        confidence = 0.0
                 else:
-                    predicted_name = f"{predicted_name} (not catchable)"
-                    pokemon = None
+                    predicted_name = f"Unexpected format: {type(result)}"
+                    confidence = 0.0
+
+                # --- Now match against your dataset ---
+                if confidence > 0:
+                    normalized_name = predicted_name
+                    if normalized_name in pokemon_df["Name"].values:
+                        row = pokemon_df[pokemon_df["Name"] == normalized_name].iloc[0]
+                        type2 = row["Type2"] if not pd.isna(row["Type2"]) else None
+
+                        pokemon = {
+                            "name": normalized_name,
+                            "type1": row["Type1"],
+                            "type2": type2,
+                            "image": f"static/images/{normalized_name.lower()}.png",
+                            "rarity": get_rarity(),
+                            "shiny": is_shiny()
+                        }
+
+                        # Save to DB
+                        db = get_db()
+                        db.execute(
+                            "INSERT INTO user_pokemon (user_id, pokemon_name, waste_type) VALUES (?,?,?)",
+                            (session["user_id"], normalized_name, "appearance")
+                        )
+                        db.commit()
+                        db.close()
 
             except Exception as e:
-                print(f"Error in appearance catch: {e}")
+                print(f"Gradio client error: {e}")
                 predicted_name = "Classification failed"
                 confidence = 0.0
+            finally:
+                if os.path.exists(path):
+                    os.remove(path)
 
     return render_template(
         "catch_appearance.html",
