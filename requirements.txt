@@ -5,3 +5,4 @@ pandas>=2.0.0
 pillow>=9.5.0
 numpy>=1.23.0
 transformers>=4.30.0
+gradio_client>=0.10.0
