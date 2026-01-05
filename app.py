@@ -350,7 +350,7 @@ def catch():
         waste=waste,
         confidence=confidence
     )
-
+ 
 # ==========================
 # NEW: Catch by Appearance Route
 # ==========================
